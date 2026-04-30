@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="status_connected">#2E7D32</color>
+    <color name="status_connecting">#F9A825</color>
+    <color name="status_disconnected">#90A4AE</color>
+    <color name="status_error">#C62828</color>
+    <color name="profile_background">#FFF8F5EE</color>
+    <color name="profile_surface">#FFFFFFFF</color>
+    <color name="profile_accent">#0D5C63</color>
+</resources>
