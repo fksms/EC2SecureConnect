@@ -69,13 +69,8 @@ val buildGoArm64 by tasks.registering(Exec::class) {
             }
             val sdkDir = props.getProperty("sdk.dir")
             val ndkVersion = applicationExtension.ndkVersion
-            if (sdkDir != null && ndkVersion != null) {
+            if (sdkDir != null) {
                 file(sdkDir).resolve("ndk").resolve(ndkVersion)
-            } else if (sdkDir != null) {
-                val ndkBaseDir = file(sdkDir).resolve("ndk")
-                val latestNdk =
-                    ndkBaseDir.listFiles()?.filter { it.isDirectory }?.maxByOrNull { it.name }
-                latestNdk ?: file(sdkDir).resolve("ndk-bundle")
             } else {
                 file("missing-sdk-path")
             }
@@ -131,6 +126,8 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.recyclerview)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.tink.android)
     implementation(libs.gson)
     implementation(libs.material)
     testImplementation(libs.junit)

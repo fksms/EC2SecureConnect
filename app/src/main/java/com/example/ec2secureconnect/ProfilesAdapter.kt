@@ -1,17 +1,26 @@
 package com.example.ec2secureconnect
 
+import android.content.Intent
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
+import com.example.ec2secureconnect.databinding.ItemFooterVersionBinding
 import com.example.ec2secureconnect.databinding.ItemProfileBinding
 
 class ProfilesAdapter(
+    private val appVersion: String,
     private val onEdit: (SsmProfile) -> Unit,
     private val onDelete: (SsmProfile) -> Unit,
     private val onConnect: (SsmProfile) -> Unit
-) : RecyclerView.Adapter<ProfilesAdapter.ProfileViewHolder>() {
+) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var profiles: List<SsmProfile> = emptyList()
     private var connectionState = TunnelConnectionState(
@@ -21,24 +30,78 @@ class ProfilesAdapter(
         message = null
     )
 
+    companion object {
+        private const val TYPE_PROFILE = 0
+        private const val TYPE_FOOTER = 1
+    }
+
     fun submitData(newProfiles: List<SsmProfile>, newState: TunnelConnectionState) {
+        val diffCallback = ProfilesDiffCallback(profiles, newProfiles, connectionState, newState)
+        val diffResult = DiffUtil.calculateDiff(diffCallback)
+
         profiles = newProfiles
         connectionState = newState
-        notifyDataSetChanged()
+        diffResult.dispatchUpdatesTo(this)
     }
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ProfileViewHolder {
-        val binding = ItemProfileBinding.inflate(
-            LayoutInflater.from(parent.context), parent, false
-        )
-        return ProfileViewHolder(binding)
+    override fun getItemViewType(position: Int): Int {
+        return if (position < profiles.size) TYPE_PROFILE else TYPE_FOOTER
     }
 
-    override fun onBindViewHolder(holder: ProfileViewHolder, position: Int) {
-        holder.bind(profiles[position], connectionState)
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        val inflater = LayoutInflater.from(parent.context)
+        return if (viewType == TYPE_PROFILE) {
+            val binding = ItemProfileBinding.inflate(inflater, parent, false)
+            ProfileViewHolder(binding)
+        } else {
+            val binding = ItemFooterVersionBinding.inflate(inflater, parent, false)
+            FooterViewHolder(binding)
+        }
     }
 
-    override fun getItemCount(): Int = profiles.size
+    override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        if (holder is ProfileViewHolder) {
+            holder.bind(profiles[position], connectionState)
+        } else if (holder is FooterViewHolder) {
+            holder.bind(appVersion)
+        }
+    }
+
+    override fun getItemCount(): Int = profiles.size + 1
+
+    private class ProfilesDiffCallback(
+        private val oldList: List<SsmProfile>,
+        private val newList: List<SsmProfile>,
+        private val oldState: TunnelConnectionState,
+        private val newState: TunnelConnectionState
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize(): Int = oldList.size + 1
+        override fun getNewListSize(): Int = newList.size + 1
+
+        override fun areItemsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            val oldIsFooter = oldItemPosition == oldList.size
+            val newIsFooter = newItemPosition == newList.size
+            if (oldIsFooter && newIsFooter) return true
+            if (oldIsFooter || newIsFooter) return false
+            return oldList[oldItemPosition].id == newList[newItemPosition].id
+        }
+
+        override fun areContentsTheSame(oldItemPosition: Int, newItemPosition: Int): Boolean {
+            val oldIsFooter = oldItemPosition == oldList.size
+            val newIsFooter = newItemPosition == newList.size
+            if (oldIsFooter && newIsFooter) return true
+            if (oldIsFooter || newIsFooter) return false
+
+            return oldList[oldItemPosition] == newList[newItemPosition] && oldState == newState
+        }
+    }
+
+    class FooterViewHolder(private val binding: ItemFooterVersionBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(version: String) {
+            binding.versionText.text = version
+        }
+    }
 
     inner class ProfileViewHolder(
         private val binding: ItemProfileBinding
@@ -48,7 +111,7 @@ class ProfilesAdapter(
             val isActive = state.activeProfileId == profile.id
             val status = when {
                 isActive -> state.status
-                state.lastProfileId == profile.id && state.status == TunnelStatus.ERROR -> TunnelStatus.ERROR
+                (state.lastProfileId == profile.id && state.status == TunnelStatus.ERROR) -> TunnelStatus.ERROR
                 else -> TunnelStatus.DISCONNECTED
             }
             val context = binding.root.context
@@ -62,14 +125,28 @@ class ProfilesAdapter(
                     TunnelStatus.DISCONNECTED -> R.string.disconnected
                 }
             )
-            binding.detailsText.text = context.getString(
+
+            val localhostText = "localhost:${profile.localPort}"
+            val fullDetails = context.getString(
                 R.string.connection_details,
                 profile.region,
                 profile.instanceId,
                 profile.localPort,
                 profile.remotePort
             )
-            binding.accessKeyText.text = profile.accessKey.masked()
+            val spannable = SpannableString(fullDetails)
+            val start = fullDetails.indexOf(localhostText)
+            if (start >= 0) {
+                spannable.setSpan(object : ClickableSpan() {
+                    override fun onClick(view: View) {
+                        val intent = Intent(Intent.ACTION_VIEW, "http://$localhostText".toUri())
+                        context.startActivity(intent)
+                    }
+                }, start, start + localhostText.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+            binding.detailsText.text = spannable
+            binding.detailsText.movementMethod = LinkMovementMethod.getInstance()
+
             binding.statusIndicator.backgroundTintList = ContextCompat.getColorStateList(
                 context, when (status) {
                     TunnelStatus.CONNECTED -> R.color.status_connected
@@ -97,11 +174,4 @@ class ProfilesAdapter(
             binding.deleteButton.setOnClickListener { onDelete(profile) }
         }
     }
-}
-
-private fun String.masked(): String {
-    if (length <= 4) {
-        return this
-    }
-    return take(4) + "*".repeat(length - 4)
 }

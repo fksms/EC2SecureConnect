@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -17,10 +18,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.ec2secureconnect.databinding.ActivityMainBinding
 import com.example.ec2secureconnect.databinding.DialogProfileBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
@@ -60,24 +63,44 @@ class MainActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(binding.main) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             view.setPadding(0, systemBars.top, 0, 0)
+
+            val bottomInset = systemBars.bottom
             binding.profilesRecyclerView.setPadding(
                 binding.profilesRecyclerView.paddingLeft,
                 binding.profilesRecyclerView.paddingTop,
                 binding.profilesRecyclerView.paddingRight,
-                systemBars.bottom + dpToPx(96)
+                bottomInset + dpToPx(96)
             )
+
+            val fabParams = binding.fabAddProfile.layoutParams as ViewGroup.MarginLayoutParams
+            fabParams.bottomMargin = bottomInset + dpToPx(16)
+            binding.fabAddProfile.layoutParams = fabParams
+
             insets
         }
 
+        val appVersionStr = try {
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                packageManager.getPackageInfo(packageName, 0)
+            }
+            getString(R.string.app_version_footer, packageInfo.versionName)
+        } catch (_: Exception) {
+            "v1.0.0"
+        }
+
         adapter = ProfilesAdapter(
-            onEdit = ::showProfileDialog, onDelete = ::confirmDelete, onConnect = ::toggleConnection
+            appVersion = appVersionStr,
+            onEdit = ::showProfileDialog,
+            onDelete = ::confirmDelete,
+            onConnect = ::toggleConnection
         )
         binding.profilesRecyclerView.layoutManager = LinearLayoutManager(this)
         binding.profilesRecyclerView.adapter = adapter
         binding.fabAddProfile.setOnClickListener { showProfileDialog(null) }
 
         loadProfiles()
-        renderProfiles()
     }
 
     override fun onStart() {
@@ -97,12 +120,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadProfiles() {
-        profiles.clear()
-        profiles += ProfileStorage.loadProfiles(this)
+        lifecycleScope.launch {
+            profiles.clear()
+            profiles += ProfileStorage.loadProfiles(this@MainActivity)
+            renderProfiles()
+        }
     }
 
     private fun saveProfiles() {
-        ProfileStorage.saveProfiles(this, profiles)
+        lifecycleScope.launch {
+            ProfileStorage.saveProfiles(this@MainActivity, profiles)
+        }
     }
 
     private fun renderProfiles() {
@@ -200,6 +228,9 @@ class MainActivity : AppCompatActivity() {
         if (parsedLocalPort == null || parsedLocalPort !in 1..65535) {
             dialogBinding.localPortInput.error = getString(R.string.validation_port)
             hasError = true
+        } else if (profiles.any { it.localPort == parsedLocalPort && it.id != existingId }) {
+            dialogBinding.localPortInput.error = getString(R.string.validation_port_duplicate)
+            hasError = true
         }
 
         if (hasError) {
@@ -233,7 +264,7 @@ class MainActivity : AppCompatActivity() {
         if (index >= 0) {
             profiles[index] = profile
         } else {
-            profiles.add(0, profile)
+            profiles.add(profile)
         }
         saveProfiles()
         renderProfiles()
