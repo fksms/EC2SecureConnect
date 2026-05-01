@@ -19,11 +19,14 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.ec2secureconnect.databinding.ActivityMainBinding
 import com.example.ec2secureconnect.databinding.DialogProfileBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import java.util.Collections
 import java.util.UUID
 
 class MainActivity : AppCompatActivity() {
@@ -32,7 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var adapter: ProfilesAdapter
     private val profiles = mutableListOf<SsmProfile>()
     private var pendingConnectProfile: SsmProfile? = null
-    private var lastShownError: String? = null
+    private val shownErrors = mutableSetOf<String>()
 
     private val connectionReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -57,23 +60,31 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) {
+            TunnelConnectionStore.resetAll(this)
+            SsmTunnelForegroundService.refresh(this)
+        }
         enableEdgeToEdge()
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        ViewCompat.setOnApplyWindowInsetsListener(binding.main) { view, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(binding.main) { _, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            view.setPadding(0, systemBars.top, 0, 0)
+            val displayCutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout())
 
-            val bottomInset = systemBars.bottom
+            val left = systemBars.left.coerceAtLeast(displayCutout.left)
+            val right = systemBars.right.coerceAtLeast(displayCutout.right)
+            val top = systemBars.top
+            val bottom = systemBars.bottom
+
+            binding.toolbar.setPadding(left + dpToPx(8), top, right + dpToPx(8), 0)
+
             binding.profilesRecyclerView.setPadding(
-                binding.profilesRecyclerView.paddingLeft,
-                binding.profilesRecyclerView.paddingTop,
-                binding.profilesRecyclerView.paddingRight,
-                bottomInset + dpToPx(96)
+                left + dpToPx(16), dpToPx(16), right + dpToPx(16), bottom + dpToPx(96)
             )
 
             val fabParams = binding.fabAddProfile.layoutParams as ViewGroup.MarginLayoutParams
-            fabParams.bottomMargin = bottomInset + dpToPx(16)
+            fabParams.bottomMargin = bottom + dpToPx(16)
+            fabParams.rightMargin = right + dpToPx(16)
             binding.fabAddProfile.layoutParams = fabParams
 
             insets
@@ -99,6 +110,35 @@ class MainActivity : AppCompatActivity() {
         binding.profilesRecyclerView.layoutManager = LinearLayoutManager(this)
         binding.profilesRecyclerView.adapter = adapter
         binding.fabAddProfile.setOnClickListener { showProfileDialog(null) }
+
+        val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+            ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
+        ) {
+            override fun onMove(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder,
+                target: RecyclerView.ViewHolder
+            ): Boolean {
+                val fromPos = viewHolder.bindingAdapterPosition
+                val toPos = target.bindingAdapterPosition
+
+                if (fromPos >= profiles.size || toPos >= profiles.size) return false
+
+                Collections.swap(profiles, fromPos, toPos)
+                adapter.moveItem(fromPos, toPos)
+                return true
+            }
+
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
+
+            override fun clearView(
+                recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder
+            ) {
+                super.clearView(recyclerView, viewHolder)
+                saveProfiles()
+            }
+        })
+        itemTouchHelper.attachToRecyclerView(binding.profilesRecyclerView)
 
         loadProfiles()
     }
@@ -137,11 +177,15 @@ class MainActivity : AppCompatActivity() {
         val state = TunnelConnectionStore.load(this)
         adapter.submitData(profiles.toList(), state)
         binding.emptyState.visibility = if (profiles.isEmpty()) View.VISIBLE else View.GONE
-        if (state.status == TunnelStatus.ERROR && !state.message.isNullOrBlank() && state.message != lastShownError) {
-            lastShownError = state.message
-            Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
-        } else if (state.status != TunnelStatus.ERROR) {
-            lastShownError = null
+
+        state.profileStates.forEach { (profileId, info) ->
+            if (info.status == TunnelStatus.ERROR && !info.message.isNullOrBlank()) {
+                val errorKey = "$profileId:${info.message}"
+                if (!shownErrors.contains(errorKey)) {
+                    shownErrors.add(errorKey)
+                    Toast.makeText(this, info.message, Toast.LENGTH_LONG).show()
+                }
+            }
         }
     }
 
@@ -275,8 +319,9 @@ class MainActivity : AppCompatActivity() {
             .setMessage(R.string.delete_profile_message).setNegativeButton(R.string.cancel, null)
             .setPositiveButton(R.string.delete) { _, _ ->
                 val state = TunnelConnectionStore.load(this)
-                if (state.activeProfileId == profile.id && (state.status == TunnelStatus.CONNECTING || state.status == TunnelStatus.CONNECTED)) {
-                    SsmTunnelForegroundService.stop(this)
+                val info = state.profileStates[profile.id]
+                if (info != null && (info.status == TunnelStatus.CONNECTING || info.status == TunnelStatus.CONNECTED)) {
+                    SsmTunnelForegroundService.stop(this, profile.id)
                 }
                 profiles.removeAll { it.id == profile.id }
                 saveProfiles()
@@ -286,8 +331,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun toggleConnection(profile: SsmProfile) {
         val state = TunnelConnectionStore.load(this)
-        if (state.activeProfileId == profile.id && (state.status == TunnelStatus.CONNECTING || state.status == TunnelStatus.CONNECTED)) {
-            SsmTunnelForegroundService.stop(this)
+        val info = state.profileStates[profile.id]
+        if (info != null && (info.status == TunnelStatus.CONNECTING || info.status == TunnelStatus.CONNECTED)) {
+            SsmTunnelForegroundService.stop(this, profile.id)
             return
         }
 
@@ -300,6 +346,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        shownErrors.removeAll { it.startsWith("${profile.id}:") }
         SsmTunnelForegroundService.start(this, profile)
     }
 

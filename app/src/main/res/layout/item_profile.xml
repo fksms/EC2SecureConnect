@@ -71,8 +71,7 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:gravity="end"
+            android:layout_marginTop="12dp"
             android:orientation="horizontal">
 
             <com.google.android.material.button.MaterialButton
@@ -91,10 +90,11 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/connectButton"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:minWidth="120dp"
+                android:layout_weight="1"
                 android:maxLines="1"
+                android:ellipsize="end"
                 android:text="@string/connect" />
         </LinearLayout>
     </LinearLayout>

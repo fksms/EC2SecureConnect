@@ -14,16 +14,15 @@ import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.google.gson.Gson
+import java.util.concurrent.ConcurrentHashMap
 
 class SsmTunnelForegroundService : Service() {
 
     private val gson = Gson()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var activeProfile: SsmProfile? = null
-    private var tunnelProcess: GoTunnelSessionProcess? = null
-
-    @Volatile
-    private var isStopping = false
+    private val activeSessions = ConcurrentHashMap<String, GoTunnelSessionProcess>()
+    private val activeProfiles = ConcurrentHashMap<String, SsmProfile>()
+    private val sessionStatuses = ConcurrentHashMap<String, TunnelStatus>()
 
     override fun onCreate() {
         super.onCreate()
@@ -40,27 +39,42 @@ class SsmTunnelForegroundService : Service() {
                 startTunnel(profile)
             }
 
-            ACTION_DISCONNECT -> stopTunnel()
+            ACTION_DISCONNECT -> {
+                val profileId = intent.getStringExtra(EXTRA_PROFILE_ID)
+                if (profileId != null) {
+                    stopTunnel(profileId)
+                } else {
+                    stopAllTunnels()
+                }
+            }
+
+            ACTION_REFRESH -> {
+                refreshState()
+            }
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
-        tunnelProcess?.stop()
-        tunnelProcess = null
-        activeProfile = null
+        activeSessions.values.forEach { it.stop() }
+        activeSessions.clear()
+        activeProfiles.clear()
+        TunnelConnectionStore.clearActiveStates(this)
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startTunnel(profile: SsmProfile) {
-        tunnelProcess?.stop()
-        notificationManager().cancel(ERROR_NOTIFICATION_ID)
-        isStopping = false
-        activeProfile = profile
+        if (activeSessions.containsKey(profile.id)) {
+            return
+        }
+
+        notificationManager().cancel(profile.id.hashCode())
+        activeProfiles[profile.id] = profile
+        sessionStatuses[profile.id] = TunnelStatus.CONNECTING
         TunnelConnectionStore.markConnecting(this, profile.id)
-        startForeground(NOTIFICATION_ID, buildNotification(profile, TunnelStatus.CONNECTING))
+        updateNotification()
 
         val process = GoTunnelSessionProcess(
             context = applicationContext,
@@ -68,43 +82,34 @@ class SsmTunnelForegroundService : Service() {
             callback = object : GoTunnelSessionProcess.Callback {
                 override fun onConnected(message: String) {
                     mainHandler.post {
-                        if (isStopping || activeProfile?.id != profile.id) {
-                            return@post
-                        }
+                        if (!activeSessions.containsKey(profile.id)) return@post
+                        sessionStatuses[profile.id] = TunnelStatus.CONNECTED
                         TunnelConnectionStore.markConnected(
                             this@SsmTunnelForegroundService, profile.id
                         )
-                        notificationManager().notify(
-                            NOTIFICATION_ID, buildNotification(profile, TunnelStatus.CONNECTED)
-                        )
+                        updateNotification()
                     }
                 }
 
                 override fun onStopped(message: String) {
                     mainHandler.post {
-                        if (isStopping || activeProfile?.id != profile.id) {
-                            return@post
-                        }
-                        activeProfile = null
-                        tunnelProcess = null
+                        if (!activeSessions.containsKey(profile.id)) return@post
+                        cleanupSession(profile.id)
                         TunnelConnectionStore.markDisconnected(
                             this@SsmTunnelForegroundService, profile.id
                         )
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                        stopSelf()
+                        checkServiceStop()
                     }
                 }
 
                 override fun onError(message: String) {
                     mainHandler.post {
-                        if (isStopping || activeProfile?.id != profile.id) {
-                            return@post
-                        }
+                        if (!activeSessions.containsKey(profile.id)) return@post
                         handleFailure(profile, message)
                     }
                 }
             })
-        tunnelProcess = process
+        activeSessions[profile.id] = process
         try {
             process.start()
         } catch (error: Exception) {
@@ -112,47 +117,87 @@ class SsmTunnelForegroundService : Service() {
         }
     }
 
-    private fun stopTunnel() {
-        isStopping = true
-        val profileId = activeProfile?.id
-        tunnelProcess?.stop()
-        tunnelProcess = null
-        activeProfile = null
+    private fun stopTunnel(profileId: String) {
+        activeSessions[profileId]?.stop()
+        activeSessions.remove(profileId)
+        activeProfiles.remove(profileId)
+        sessionStatuses.remove(profileId)
         TunnelConnectionStore.markDisconnected(this, profileId)
+        checkServiceStop()
+    }
+
+    private fun stopAllTunnels() {
+        activeSessions.values.forEach { it.stop() }
+        activeSessions.clear()
+        activeProfiles.clear()
+        sessionStatuses.clear()
+        TunnelConnectionStore.clearActiveStates(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun cleanupSession(profileId: String) {
+        activeSessions.remove(profileId)
+        activeProfiles.remove(profileId)
+        sessionStatuses.remove(profileId)
+    }
+
+    private fun checkServiceStop() {
+        if (activeSessions.isEmpty()) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else {
+            updateNotification()
+        }
     }
 
     private fun handleFailure(profile: SsmProfile, message: String) {
-        tunnelProcess?.stop()
-        tunnelProcess = null
-        activeProfile = null
+        cleanupSession(profile.id)
         TunnelConnectionStore.markError(this, profile.id, message)
-        stopForeground(STOP_FOREGROUND_REMOVE)
         notificationManager().notify(
-            ERROR_NOTIFICATION_ID, buildFailureNotification(message)
+            profile.id.hashCode(), buildFailureNotification(message)
         )
-        stopSelf()
+        checkServiceStop()
     }
 
-    private fun buildNotification(profile: SsmProfile, status: TunnelStatus): Notification {
+    private fun refreshState() {
+        sessionStatuses.forEach { (id, status) ->
+            when (status) {
+                TunnelStatus.CONNECTING -> TunnelConnectionStore.markConnecting(this, id)
+                TunnelStatus.CONNECTED -> TunnelConnectionStore.markConnected(this, id)
+                else -> {}
+            }
+        }
+        checkServiceStop()
+    }
+
+    private fun updateNotification() {
+        val notification = buildNotification()
+        startForeground(NOTIFICATION_ID, notification)
+    }
+
+    private fun buildNotification(): Notification {
         val openAppIntent = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val disconnectIntent = PendingIntent.getService(
+        val disconnectAllIntent = PendingIntent.getService(
             this, 1, Intent(this, SsmTunnelForegroundService::class.java).apply {
                 action = ACTION_DISCONNECT
             }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val titleRes = if (status == TunnelStatus.CONNECTED) {
-            R.string.notification_connected_title
+        val activeCount = activeProfiles.size
+        val title = if (activeCount == 1) {
+            val profile = activeProfiles.values.first()
+            getString(R.string.notification_connected_title) + ": " + profile.name
         } else {
-            R.string.notification_connecting_title
+            getString(R.string.notification_channel_name) + " ($activeCount active)"
         }
-        val contentText = if (status == TunnelStatus.CONNECTED) {
+
+        val contentText = if (activeCount == 1) {
+            val profile = activeProfiles.values.first()
             getString(
                 R.string.notification_connected_message,
                 profile.name,
@@ -160,17 +205,17 @@ class SsmTunnelForegroundService : Service() {
                 profile.remotePort
             )
         } else {
-            getString(R.string.notification_connecting_message, profile.name)
+            activeProfiles.values.joinToString("\n") { p ->
+                "${p.name}: localhost:${p.localPort} -> ${p.remotePort}"
+            }
         }
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_upload_done)
-            .setContentTitle(getString(titleRes)).setContentText(contentText)
+            .setSmallIcon(android.R.drawable.stat_sys_upload_done).setContentTitle(title)
+            .setContentText(if (activeCount == 1) contentText else getString(R.string.notification_connected_title))
             .setStyle(NotificationCompat.BigTextStyle().bigText(contentText))
-            .setContentIntent(openAppIntent)
-            .setOngoing(status != TunnelStatus.DISCONNECTED && status != TunnelStatus.ERROR)
-            .setOnlyAlertOnce(true).addAction(
-                0, getString(R.string.notification_stop_action), disconnectIntent
+            .setContentIntent(openAppIntent).setOngoing(true).setOnlyAlertOnce(true).addAction(
+                0, getString(R.string.notification_stop_action), disconnectAllIntent
             ).build()
     }
 
@@ -208,10 +253,11 @@ class SsmTunnelForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "ssm_tunnel_channel"
         private const val NOTIFICATION_ID = 1001
-        private const val ERROR_NOTIFICATION_ID = 1002
         private const val EXTRA_PROFILE_JSON = "extra_profile_json"
+        private const val EXTRA_PROFILE_ID = "extra_profile_id"
         private const val ACTION_CONNECT = "com.example.android_ssm.action.CONNECT"
         private const val ACTION_DISCONNECT = "com.example.android_ssm.action.DISCONNECT"
+        private const val ACTION_REFRESH = "com.example.android_ssm.action.REFRESH"
 
         fun start(context: Context, profile: SsmProfile) {
             val intent = Intent(context, SsmTunnelForegroundService::class.java).apply {
@@ -221,9 +267,19 @@ class SsmTunnelForegroundService : Service() {
             ContextCompat.startForegroundService(context, intent)
         }
 
-        fun stop(context: Context) {
+        fun stop(context: Context, profileId: String? = null) {
             val intent = Intent(context, SsmTunnelForegroundService::class.java).apply {
                 action = ACTION_DISCONNECT
+                if (profileId != null) {
+                    putExtra(EXTRA_PROFILE_ID, profileId)
+                }
+            }
+            context.startService(intent)
+        }
+
+        fun refresh(context: Context) {
+            val intent = Intent(context, SsmTunnelForegroundService::class.java).apply {
+                action = ACTION_REFRESH
             }
             context.startService(intent)
         }

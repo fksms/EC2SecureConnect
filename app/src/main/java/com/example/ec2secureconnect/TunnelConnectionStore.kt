@@ -3,70 +3,95 @@ package com.example.ec2secureconnect
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.edit
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 enum class TunnelStatus {
     DISCONNECTED, CONNECTING, CONNECTED, ERROR;
-
-    companion object {
-        fun from(raw: String?): TunnelStatus =
-            entries.firstOrNull { it.name == raw } ?: DISCONNECTED
-    }
 }
 
+data class TunnelStatusInfo(
+    val status: TunnelStatus, val message: String? = null
+)
+
 data class TunnelConnectionState(
-    val activeProfileId: String?,
-    val lastProfileId: String?,
-    val status: TunnelStatus,
-    val message: String?
+    val profileStates: Map<String, TunnelStatusInfo>
 )
 
 object TunnelConnectionStore {
 
     const val ACTION_STATE_CHANGED = "com.example.android_ssm.ACTION_TUNNEL_STATE_CHANGED"
-    private const val PREFS_NAME = "ssm_tunnel_state"
-    private const val KEY_PROFILE_ID = "active_profile_id"
-    private const val KEY_LAST_PROFILE_ID = "last_profile_id"
-    private const val KEY_STATUS = "status"
-    private const val KEY_MESSAGE = "message"
+    private const val PREFS_NAME = "ssm_tunnel_state_v2"
+    private const val KEY_STATES = "profile_states"
+
+    private val gson = Gson()
 
     fun load(context: Context): TunnelConnectionState {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return TunnelConnectionState(
-            activeProfileId = prefs.getString(KEY_PROFILE_ID, null),
-            lastProfileId = prefs.getString(KEY_LAST_PROFILE_ID, null),
-            status = TunnelStatus.from(prefs.getString(KEY_STATUS, TunnelStatus.DISCONNECTED.name)),
-            message = prefs.getString(KEY_MESSAGE, null)
-        )
+        val json = prefs.getString(KEY_STATES, null)
+        val profileStates = if (json != null) {
+            val type = object : TypeToken<Map<String, TunnelStatusInfo>>() {}.type
+            gson.fromJson<Map<String, TunnelStatusInfo>>(json, type) ?: emptyMap()
+        } else {
+            emptyMap()
+        }
+        return TunnelConnectionState(profileStates)
     }
 
     fun markConnecting(context: Context, profileId: String) {
-        update(context, profileId, profileId, TunnelStatus.CONNECTING, null)
+        update(context, profileId, TunnelStatusInfo(TunnelStatus.CONNECTING))
     }
 
     fun markConnected(context: Context, profileId: String) {
-        update(context, profileId, profileId, TunnelStatus.CONNECTED, null)
+        update(context, profileId, TunnelStatusInfo(TunnelStatus.CONNECTED))
     }
 
-    fun markDisconnected(context: Context, profileId: String?) {
-        update(context, null, profileId, TunnelStatus.DISCONNECTED, null)
+    fun markDisconnected(context: Context, profileId: String) {
+        update(context, profileId, TunnelStatusInfo(TunnelStatus.DISCONNECTED))
     }
 
     fun markError(context: Context, profileId: String, message: String) {
-        update(context, null, profileId, TunnelStatus.ERROR, message)
+        update(context, profileId, TunnelStatusInfo(TunnelStatus.ERROR, message))
+    }
+
+    fun clearActiveStates(context: Context) {
+        val currentState = load(context).profileStates.toMutableMap()
+        val iterator = currentState.entries.iterator()
+        var changed = false
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            if (entry.value.status == TunnelStatus.CONNECTING || entry.value.status == TunnelStatus.CONNECTED) {
+                iterator.remove()
+                changed = true
+            }
+        }
+        if (changed) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+                putString(KEY_STATES, gson.toJson(currentState))
+            }
+            context.sendBroadcast(Intent(ACTION_STATE_CHANGED).setPackage(context.packageName))
+        }
+    }
+
+    fun resetAll(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            remove(KEY_STATES)
+        }
+        context.sendBroadcast(Intent(ACTION_STATE_CHANGED).setPackage(context.packageName))
     }
 
     private fun update(
-        context: Context,
-        activeProfileId: String?,
-        lastProfileId: String?,
-        status: TunnelStatus,
-        message: String?
+        context: Context, profileId: String, info: TunnelStatusInfo
     ) {
+        val currentState = load(context).profileStates.toMutableMap()
+        if (info.status == TunnelStatus.DISCONNECTED) {
+            currentState.remove(profileId)
+        } else {
+            currentState[profileId] = info
+        }
+
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
-            putString(KEY_PROFILE_ID, activeProfileId)
-            putString(KEY_LAST_PROFILE_ID, lastProfileId)
-            putString(KEY_STATUS, status.name)
-            putString(KEY_MESSAGE, message)
+            putString(KEY_STATES, gson.toJson(currentState))
         }
         context.sendBroadcast(Intent(ACTION_STATE_CHANGED).setPackage(context.packageName))
     }

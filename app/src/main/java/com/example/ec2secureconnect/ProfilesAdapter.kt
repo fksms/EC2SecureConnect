@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.example.ec2secureconnect.databinding.ItemFooterVersionBinding
 import com.example.ec2secureconnect.databinding.ItemProfileBinding
+import java.util.Collections
 
 class ProfilesAdapter(
     private val appVersion: String,
@@ -23,12 +24,7 @@ class ProfilesAdapter(
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var profiles: List<SsmProfile> = emptyList()
-    private var connectionState = TunnelConnectionState(
-        activeProfileId = null,
-        lastProfileId = null,
-        status = TunnelStatus.DISCONNECTED,
-        message = null
-    )
+    private var connectionState = TunnelConnectionState(emptyMap())
 
     companion object {
         private const val TYPE_PROFILE = 0
@@ -42,6 +38,14 @@ class ProfilesAdapter(
         profiles = newProfiles
         connectionState = newState
         diffResult.dispatchUpdatesTo(this)
+    }
+
+    fun moveItem(fromPosition: Int, toPosition: Int) {
+        if (fromPosition >= profiles.size || toPosition >= profiles.size) return
+        val mutableList = profiles.toMutableList()
+        Collections.swap(mutableList, fromPosition, toPosition)
+        profiles = mutableList
+        notifyItemMoved(fromPosition, toPosition)
     }
 
     override fun getItemViewType(position: Int): Int {
@@ -108,12 +112,8 @@ class ProfilesAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(profile: SsmProfile, state: TunnelConnectionState) {
-            val isActive = state.activeProfileId == profile.id
-            val status = when {
-                isActive -> state.status
-                (state.lastProfileId == profile.id && state.status == TunnelStatus.ERROR) -> TunnelStatus.ERROR
-                else -> TunnelStatus.DISCONNECTED
-            }
+            val statusInfo = state.profileStates[profile.id]
+            val status = statusInfo?.status ?: TunnelStatus.DISCONNECTED
             val context = binding.root.context
 
             binding.profileNameText.text = profile.name
@@ -155,15 +155,15 @@ class ProfilesAdapter(
                     TunnelStatus.DISCONNECTED -> R.color.status_disconnected
                 }
             )
-            binding.messageText.text = state.message.orEmpty()
+            binding.messageText.text = statusInfo?.message.orEmpty()
             binding.messageText.visibility =
-                if (status == TunnelStatus.ERROR && !state.message.isNullOrBlank()) {
+                if (status == TunnelStatus.ERROR && !statusInfo?.message.isNullOrBlank()) {
                     View.VISIBLE
                 } else {
                     View.GONE
                 }
             binding.connectButton.text = context.getString(
-                if (isActive && (status == TunnelStatus.CONNECTING || status == TunnelStatus.CONNECTED)) {
+                if (status == TunnelStatus.CONNECTING || status == TunnelStatus.CONNECTED) {
                     R.string.disconnect
                 } else {
                     R.string.connect
