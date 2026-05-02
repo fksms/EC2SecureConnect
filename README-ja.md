@@ -4,7 +4,6 @@ EC2 Secure Connectは、AWS Systems Manager Session Managerを使用して、EC2
 アプリのバックグラウンドでは、AWS公式の [session-manager-plugin](https://github.com/aws/session-manager-plugin) が動作しています。
 
 <br>
-<br>
     
 <div align="center">
 

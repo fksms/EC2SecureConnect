@@ -1,9 +1,10 @@
+日本語版は[こちら](./README-ja.md)<br><br>
+
 # EC2 Secure Connect
 
 EC2 Secure Connect is an **Android application** that provides secure remote access to EC2 instances using AWS Systems Manager Session Manager. You can **securely** connect to EC2 instances from your Android device without opening ports for SSH or HTTP.<br>
 Behind the scenes, the app runs AWS's official [session-manager-plugin](https://github.com/aws/session-manager-plugin).
 
-<br>
 <br>
 
 <div align="center">
