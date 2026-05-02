@@ -91,21 +91,20 @@ jobs:
 
       - name: Rename artifacts with arm64-v8a
         run: |
+          RELEASE_NAME="${{ needs.create-release.outputs.release_name }}"
           cd app/build/outputs
 
           # APKをリネーム
           for file in apk/release/*.apk; do
             if [ -f "$file" ]; then
-              filename=$(basename "$file" .apk)
-              mv "$file" "apk/release/${filename}-arm64-v8a.apk"
+              mv "$file" "apk/release/EC2SecureConnect-v${RELEASE_NAME}-arm64-v8a.apk"
             fi
           done
 
           # AABをリネーム
           for file in bundle/release/*.aab; do
             if [ -f "$file" ]; then
-              filename=$(basename "$file" .aab)
-              mv "$file" "bundle/release/${filename}-arm64-v8a.aab"
+              mv "$file" "bundle/release/EC2SecureConnect-v${RELEASE_NAME}-arm64-v8a.aab"
             fi
           done
 
