@@ -13,21 +13,27 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           java-version: "11"
           distribution: "temurin"
 
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v6
         with:
           go-version: "1.26"
 
-      - name: Set up Android NDK
+      - name: Setup Android NDK
+        id: setup-ndk
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d # https://developer.android.com/ndk/downloads
+
+      # APIレベルは24（Android 7.0 Nougat）以上を指定
+      - name: Setup CGO Compiler Path
+        run: |
+          echo "GO_CC=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" >> $GITHUB_ENV
 
       - name: Setup Gradle Keystore Configuration
         run: |

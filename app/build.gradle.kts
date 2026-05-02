@@ -123,8 +123,15 @@ val buildGoArm64 by tasks.registering(Exec::class) {
         hostOs.contains("windows") -> "windows-x86_64"
         else -> "linux-x86_64"
     }
-    val ccPath =
+
+    // CGOのコンパイラを外部で定義している場合はそちらを優先して利用する
+    val ccPathOverride =
+        providers.environmentVariable("GO_CC").getOrElse(localProperties.getProperty("go.cc") ?: "")
+    val ccPath = if (ccPathOverride.isNotEmpty()) {
+        file(ccPathOverride)
+    } else {
         ndkDir.resolve("toolchains/llvm/prebuilt/$hostTag/bin/aarch64-linux-android$minSdk-clang")
+    }
 
     environment("GOOS", "android")
     environment("GOARCH", "arm64")
@@ -133,8 +140,8 @@ val buildGoArm64 by tasks.registering(Exec::class) {
     environment("GOCACHE", goBuildCacheDir.get().asFile.resolve("cache").absolutePath)
 
     doFirst {
-        if (!ndkDir.exists()) {
-            throw GradleException("NDKが見つかりません。Android StudioのSDK ManagerからNDKをインストールしてください。")
+        if (!ccPath.exists()) {
+            throw GradleException("The compiler for CGO could not be found. Please check your path: ${ccPath.absolutePath}")
         }
         outputFile.get().asFile.parentFile.mkdirs()
     }
