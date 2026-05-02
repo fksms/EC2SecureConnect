@@ -1,6 +1,6 @@
 name: Build
 
-on: workflow_dispatch
+on: [workflow_dispatch, pull_request]
 
 jobs:
   build:
@@ -54,7 +54,7 @@ jobs:
         run: |
           ./gradlew bundleRelease
 
-      - name: Upload Artifacts (workflow_dispatch)
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts-${{ github.run_number }}

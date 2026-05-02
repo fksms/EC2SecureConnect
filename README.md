@@ -28,6 +28,8 @@ SSH forwarding demonstration
 
 ## Build Instructions
 
+### Local Build
+
 To build `ssm-client` for Android, Go and Android NDK are required. Install the Android NDK through Android Studio before building the project. After installing Go, add the following to `./local.properties`:
 
 Configuration examples:
@@ -44,6 +46,19 @@ release.keystore.base64=<Base64 encoded Keystore>
 release.keystore.password=<Keystore password>
 release.key.alias=<Keystore alias>
 release.key.password=<Keystore key password>
+```
+
+### GitHub Actions Build
+
+You can automatically build using `build.yml` on GitHub Actions.
+Before building, configure the following environment variables in `Repository secrets`:
+After the build is complete, you can download the artifacts (APK/AAB) from Artifacts.
+
+```
+RELEASE_KEYSTORE_BASE64=<Base64 encoded Keystore>
+RELEASE_KEYSTORE_PASSWORD=<Keystore password>
+RELEASE_KEY_ALIAS=<Keystore alias>
+RELEASE_KEY_PASSWORD=<Keystore key password>
 ```
 
 ## Others

@@ -1,0 +1,120 @@
+name: Release
+
+# "release-*"ブランチ発行時に自動で実行。
+on:
+  push:
+    branches:
+      - release-*
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.create_tag.outputs.tag_name }}
+      release_name: ${{ steps.create_tag.outputs.release_name }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create tag from branch name
+        id: create_tag
+        run: |
+          BRANCH_NAME=${{ github.ref }}
+          RELEASE_NAME=${BRANCH_NAME#refs/heads/release-}
+          TAG_NAME="v${RELEASE_NAME}"
+
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "release_name=${RELEASE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Push tag
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag -a ${{ steps.create_tag.outputs.tag_name }} -m "Release ${{ steps.create_tag.outputs.tag_name }}"
+          git push origin ${{ steps.create_tag.outputs.tag_name }}
+
+  build-release:
+    runs-on: ubuntu-latest
+    needs: create-release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: "11"
+          distribution: "temurin"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Setup Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27d # https://developer.android.com/ndk/downloads
+
+      # GradelビルドでGoを使用するため、Goの絶対パスの設定が必要
+      - name: Setup Go Path
+        run: echo "GO_BINARY=$(which go)" >> $GITHUB_ENV
+
+      # APIレベルは24（Android 7.0 Nougat）以上を指定
+      - name: Setup CGO Compiler Path
+        run: |
+          echo "GO_CC=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" >> $GITHUB_ENV
+
+      - name: Setup Gradle Keystore Configuration
+        run: |
+          echo "RELEASE_KEYSTORE_BASE64=${{ secrets.RELEASE_KEYSTORE_BASE64 }}" >> $GITHUB_ENV
+          echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}" >> $GITHUB_ENV
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Release APK
+        run: |
+          ./gradlew assembleRelease
+
+      - name: Build Release AAB
+        run: |
+          ./gradlew bundleRelease
+
+      - name: Rename artifacts with arm64-v8a
+        run: |
+          cd app/build/outputs
+
+          # APKをリネーム
+          for file in apk/release/*.apk; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file" .apk)
+              mv "$file" "apk/release/${filename}-arm64-v8a.apk"
+            fi
+          done
+
+          # AABをリネーム
+          for file in bundle/release/*.aab; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file" .aab)
+              mv "$file" "bundle/release/${filename}-arm64-v8a.aab"
+            fi
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.tag_name }}
+          name: Release ${{ needs.create-release.outputs.release_name }}
+          draft: false
+          prerelease: false
+          files: |
+            app/build/outputs/apk/release/*-arm64-v8a.apk
+            app/build/outputs/bundle/release/*-arm64-v8a.aab
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
