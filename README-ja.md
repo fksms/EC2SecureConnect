@@ -10,13 +10,13 @@ EC2 Secure Connectは、AWS Systems Manager Session Managerを使用して、EC2
 
 HTTPの転送の様子
 
-<video controls src="./assets/http_test.mp4" width="320" muted="false"></video>
+<video controls src="https://github.com/user-attachments/assets/a5e929b8-d9fa-434d-b91a-1f95e5b54cf0" width="320" muted="false"></video>
 
 <br>
 
 SSHの転送の様子
 
-<video controls src="./assets/ssh_test.mp4" width="320" muted="false"></video>
+<video controls src="https://github.com/user-attachments/assets/065621b2-366b-4e56-b048-07befad8c9e7" width="320" muted="false"></video>
 
 </div>
 
