@@ -28,8 +28,23 @@ SSH forwarding demonstration
 
 ## Build Instructions
 
-- Go is required to build `ssm-client`. After installing Go, set the `goBinary` path in `./gradle.properties` to your Go binary location.
-- Android NDK is required to build `ssm-client` for Android. Install the Android NDK through Android Studio before building the project.
+To build `ssm-client` for Android, Go and Android NDK are required. Install the Android NDK through Android Studio before building the project. After installing Go, add the following to `./local.properties`:
+
+Configuration examples:
+
+- For Debug and Release builds without a certificate
+```
+go.binary=<Path to your Go executable>
+```
+
+- For Release builds with a certificate
+```
+go.binary=<Path to your Go executable>
+release.keystore.base64=<Base64 encoded Keystore>
+release.keystore.password=<Keystore password>
+release.key.alias=<Keystore alias>
+release.key.password=<Keystore key password>
+```
 
 ## Others
 
