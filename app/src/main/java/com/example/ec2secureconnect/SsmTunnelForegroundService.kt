@@ -70,6 +70,14 @@ class SsmTunnelForegroundService : Service() {
             return
         }
 
+        val conflict = activeProfiles.values.find { it.localPort == profile.localPort }
+        if (conflict != null) {
+            handleFailure(
+                profile, getString(R.string.error_port_conflict, profile.localPort, conflict.name)
+            )
+            return
+        }
+
         notificationManager().cancel(profile.id.hashCode())
         activeProfiles[profile.id] = profile
         sessionStatuses[profile.id] = TunnelStatus.CONNECTING

@@ -6,6 +6,7 @@ import android.text.Spanned
 import android.text.method.LinkMovementMethod
 import android.text.style.ClickableSpan
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.core.content.ContextCompat
@@ -20,7 +21,8 @@ class ProfilesAdapter(
     private val appVersion: String,
     private val onEdit: (SsmProfile) -> Unit,
     private val onDelete: (SsmProfile) -> Unit,
-    private val onConnect: (SsmProfile) -> Unit
+    private val onConnect: (SsmProfile) -> Unit,
+    private val onStartDrag: (RecyclerView.ViewHolder) -> Unit
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     private var profiles: List<SsmProfile> = emptyList()
@@ -172,6 +174,14 @@ class ProfilesAdapter(
             binding.connectButton.setOnClickListener { onConnect(profile) }
             binding.editButton.setOnClickListener { onEdit(profile) }
             binding.deleteButton.setOnClickListener { onDelete(profile) }
+
+            binding.dragHandle.setOnTouchListener { v, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    v.performClick()
+                    onStartDrag(this)
+                }
+                false
+            }
         }
     }
 }

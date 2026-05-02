@@ -258,6 +258,7 @@ Resources:
           # Install and start Nginx
           dnf install -y nginx
           systemctl enable nginx
+          systemctl stop nginx
           systemctl start nginx
 
           # Install and start OpenSSH Server
@@ -276,6 +277,7 @@ Resources:
 
           # Start and enable SSH service
           systemctl enable sshd
+          systemctl stop sshd
           systemctl start sshd
 
 # ============================================================

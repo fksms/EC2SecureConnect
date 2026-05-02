@@ -2,6 +2,7 @@
 <com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/cardView"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
@@ -22,6 +23,16 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:orientation="horizontal">
+
+            <com.example.ec2secureconnect.DragHandleView
+                android:id="@+id/dragHandle"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:layout_marginEnd="12dp"
+                android:alpha="0.5"
+                android:contentDescription="@string/drag_handle"
+                android:src="@drawable/ic_drag_handle"
+                app:tint="?attr/colorOnSurfaceVariant" />
 
             <View
                 android:id="@+id/statusIndicator"
@@ -72,7 +83,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:orientation="horizontal">
+            android:orientation="horizontal"
+            android:gravity="end">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/editButton"
@@ -90,11 +102,8 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/connectButton"
-                android:layout_width="0dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:maxLines="1"
-                android:ellipsize="end"
                 android:text="@string/connect" />
         </LinearLayout>
     </LinearLayout>

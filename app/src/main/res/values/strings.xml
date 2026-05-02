@@ -29,6 +29,7 @@
     <string name="validation_required">This field is required.</string>
     <string name="validation_port">Enter a port between 1 and 65535.</string>
     <string name="validation_port_duplicate">This local port is already in use by another profile.</string>
+    <string name="error_port_conflict">Local port %1$d is already in use by \"%2$s\"</string>
     <string name="notification_channel_name">SSM tunnels</string>
     <string name="notification_channel_description">Keeps SSM port forwarding sessions alive while the app is in the background.</string>
     <string name="notification_connecting_title">Connecting tunnel</string>
@@ -40,4 +41,5 @@
     <string name="notification_permission_required">Notification permission is required to keep the foreground service visible.</string>
     <string name="connection_details">%1$s | %2$s | localhost:%3$d → remote:%4$d</string>
     <string name="app_version_footer">v%1$s (session-manager-plugin: 1.2.814.0)</string>
+    <string name="drag_handle">Drag handle</string>
 </resources>

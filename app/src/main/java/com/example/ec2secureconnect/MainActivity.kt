@@ -101,17 +101,20 @@ class MainActivity : AppCompatActivity() {
             "v1.0.0"
         }
 
+        lateinit var itemTouchHelper: ItemTouchHelper
         adapter = ProfilesAdapter(
             appVersion = appVersionStr,
             onEdit = ::showProfileDialog,
             onDelete = ::confirmDelete,
-            onConnect = ::toggleConnection
-        )
+            onConnect = ::toggleConnection,
+            onStartDrag = { viewHolder ->
+                itemTouchHelper.startDrag(viewHolder)
+            })
         binding.profilesRecyclerView.layoutManager = LinearLayoutManager(this)
         binding.profilesRecyclerView.adapter = adapter
         binding.fabAddProfile.setOnClickListener { showProfileDialog(null) }
 
-        val itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
+        itemTouchHelper = ItemTouchHelper(object : ItemTouchHelper.SimpleCallback(
             ItemTouchHelper.UP or ItemTouchHelper.DOWN, 0
         ) {
             override fun onMove(
@@ -131,10 +134,26 @@ class MainActivity : AppCompatActivity() {
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {}
 
+            override fun isLongPressDragEnabled(): Boolean = false
+
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    viewHolder?.itemView?.let { itemView ->
+                        itemView.animate().scaleX(1.02f).scaleY(1.02f).setDuration(150).start()
+                        itemView.findViewById<View>(R.id.cardView)?.elevation = dpToPx(8).toFloat()
+                    }
+                }
+                super.onSelectedChanged(viewHolder, actionState)
+            }
+
             override fun clearView(
                 recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder
             ) {
                 super.clearView(recyclerView, viewHolder)
+                viewHolder.itemView.let { itemView ->
+                    itemView.animate().scaleX(1f).scaleY(1f).setDuration(150).start()
+                    itemView.findViewById<View>(R.id.cardView)?.elevation = 0f
+                }
                 saveProfiles()
             }
         })
@@ -271,9 +290,6 @@ class MainActivity : AppCompatActivity() {
         val parsedLocalPort = localPort.toIntOrNull()
         if (parsedLocalPort == null || parsedLocalPort !in 1..65535) {
             dialogBinding.localPortInput.error = getString(R.string.validation_port)
-            hasError = true
-        } else if (profiles.any { it.localPort == parsedLocalPort && it.id != existingId }) {
-            dialogBinding.localPortInput.error = getString(R.string.validation_port_duplicate)
             hasError = true
         }
 
