@@ -26,8 +26,23 @@ SSHの転送の様子
 
 ## ビルド方法
 
-- `ssm-client` をビルドするためにGoが必要です。Goをインストール後、`./gradle.properties` の `goBinary` をGoのバイナリのパスに設定してください。
-- `ssm-client` をAndroid向けにビルドするために、Android NDKが必要です。Android Studioでプロジェクトをビルド前にAndroid NDKをインストールしてください。
+`ssm-client` をAndroid向けにビルドするために、GoとAndroid NDKが必要です。Android Studioでプロジェクトをビルド前にAndroid NDKをインストールしてください。また、Goをインストール後、`./local.properties` に以下を追記してください。
+
+設定例：
+
+- 証明書無しでDebug,Releaseビルドを行う場合
+```
+go.binary=<Goの実行ファイルへのパス>
+```
+
+- 証明書を使用してReleaseビルドを行う場合
+```
+go.binary=<Goの実行ファイルへのパス>
+release.keystore.base64=<KeystoreのBase64エンコード値>
+release.keystore.password=<Keystoreのパスワード>
+release.key.alias=<Keystoreのエイリアス>
+release.key.password=<Keystoreのキーのパスワード>
+```
 
 ## その他
 
