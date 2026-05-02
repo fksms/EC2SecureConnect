@@ -6,9 +6,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      GO_BINARY: /usr/local/go/bin/go
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -29,6 +26,10 @@ jobs:
         uses: nttld/setup-ndk@v1
         with:
           ndk-version: r27d # https://developer.android.com/ndk/downloads
+
+      # GradelビルドでGoを使用するため、Goの絶対パスの設定が必要
+      - name: Setup Go Path
+        run: echo "GO_BINARY=$(which go)" >> $GITHUB_ENV
 
       # APIレベルは24（Android 7.0 Nougat）以上を指定
       - name: Setup CGO Compiler Path
