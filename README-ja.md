@@ -12,6 +12,8 @@ HTTPの転送の様子
 <img src="./assets/http_test.gif" alt="HTTP forwarding demonstration">
 
 <br>
+<br>
+<br>
 
 SSHの転送の様子
 
