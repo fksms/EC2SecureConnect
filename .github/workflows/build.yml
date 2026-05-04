@@ -1,6 +1,6 @@
 name: Build
 
-on: [workflow_dispatch, pull_request]
+on: [ workflow_dispatch, pull_request ]
 
 jobs:
   build:
@@ -37,11 +37,19 @@ jobs:
           echo "GO_CC=${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" >> $GITHUB_ENV
 
       - name: Setup Gradle Keystore Configuration
+        # if内でsecretsが使えないので、環境変数を経由して署名情報を設定
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        # 署名情報が提供されている場合のみ環境変数を設定
+        if: env.RELEASE_KEYSTORE_BASE64 != ''
         run: |
-          echo "RELEASE_KEYSTORE_BASE64=${{ secrets.RELEASE_KEYSTORE_BASE64 }}" >> $GITHUB_ENV
-          echo "RELEASE_KEYSTORE_PASSWORD=${{ secrets.RELEASE_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "RELEASE_KEY_ALIAS=${{ secrets.RELEASE_KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "RELEASE_KEY_PASSWORD=${{ secrets.RELEASE_KEY_PASSWORD }}" >> $GITHUB_ENV
+          echo "RELEASE_KEYSTORE_BASE64=$RELEASE_KEYSTORE_BASE64" >> $GITHUB_ENV
+          echo "RELEASE_KEYSTORE_PASSWORD=$RELEASE_KEYSTORE_PASSWORD" >> $GITHUB_ENV
+          echo "RELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS" >> $GITHUB_ENV
+          echo "RELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD" >> $GITHUB_ENV
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew

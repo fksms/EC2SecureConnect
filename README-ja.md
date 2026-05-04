@@ -32,9 +32,7 @@ SSHの転送の様子
 
 `ssm-client` をAndroid向けにビルドするために、GoとAndroid NDKが必要です。Android Studioでプロジェクトをビルド前にAndroid NDKをインストールしてください。また、Goをインストール後、`./local.properties` に以下を追記してください。
 
-設定例：
-
-- 証明書無しでDebug,Releaseビルドを行う場合
+- 証明書無しでDebug/Releaseビルドを行う場合
 ```
 go.binary=<Goの実行ファイルへのパス>
 ```
@@ -50,10 +48,14 @@ release.key.password=<Keystoreのキーのパスワード>
 
 ### GitHub Actionsでのビルド
 
-`build.yml` を使用して、GitHub Actions上で自動的にビルドを行うことができます。
-ビルド前に `Repository secrets` に以下の環境変数を設定してください。
-ビルド完了後は、Artifactsから成果物（APK/AAB）をダウンロードできます。
+[`build.yml`](./.github/workflows/build.yml) を使用して、GitHub Actions上で自動的にビルドを行うことができます。証明書を使用してReleaseビルドを行う場合は、ビルド前に `Repository secrets` に以下の環境変数を設定してください。ビルド完了後は、Artifactsから成果物（APK/AAB）をダウンロードできます。
 
+- 証明書無しでReleaseビルドを行う場合
+```
+# Repository secretsの設定は不要
+```
+
+- 証明書を使用してReleaseビルドを行う場合
 ```
 RELEASE_KEYSTORE_BASE64=<KeystoreのBase64エンコード値>
 RELEASE_KEYSTORE_PASSWORD=<Keystoreのパスワード>
